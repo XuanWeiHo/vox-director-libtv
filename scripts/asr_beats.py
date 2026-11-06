@@ -21,16 +21,16 @@ import json
 import os
 import subprocess
 import sys
+import re
 
-import atlas_cloud
-from provider import get_provider
+from local_asr import transcribe
 
 # Both Omni video-edit and Kling video-edit cap a single call at 10s; leave headroom
 # so a beat that lands right on the limit doesn't get rejected for being 10.0s exactly.
 MAX_BEAT_DUR = 9.5
 MIN_BEAT_DUR = 2.0
 PAUSE_GAP_S = 0.35            # a gap this long between words reads as a natural pause
-SENTENCE_END = (".", "!", "?")
+SENTENCE_END = (".", "!", "?", "。", "！", "？")
 
 
 def probe_dims(path):
@@ -70,11 +70,15 @@ def segment_words(words, max_dur=MAX_BEAT_DUR, min_dur=MIN_BEAT_DUR, pause_gap=P
         beats.append({
             "start": round(cur[0]["start"], 2),
             "end": round(cur[-1]["end"], 2),
-            "text": " ".join(w["text"] for w in cur),
+            "text": re.sub(r"(?<=[\u3000-\u9fff])\s+(?=[\u3000-\u9fff])", "", " ".join(w["text"] for w in cur)),
         })
         cur.clear()
 
     for i, w in enumerate(words):
+        if cur and w["end"] - cur[0]["start"] > max_dur:
+            flush()
+        if w["end"] - w["start"] > max_dur:
+            raise ValueError("A single ASR word exceeds max beat duration; inspect timestamps")
         cur.append(w)
         dur = w["end"] - cur[0]["start"]
         is_last = i == len(words) - 1
@@ -91,7 +95,7 @@ def segment_words(words, max_dur=MAX_BEAT_DUR, min_dur=MIN_BEAT_DUR, pause_gap=P
     # sub-min_dur clip that's awkward to generate/cut on its own
     merged = []
     for b in beats:
-        if merged and (b["end"] - b["start"]) < min_dur:
+        if merged and (b["end"] - b["start"]) < min_dur and b["end"] - merged[-1]["start"] <= max_dur:
             merged[-1]["end"] = b["end"]
             merged[-1]["text"] += " " + b["text"]
         else:
@@ -100,7 +104,7 @@ def segment_words(words, max_dur=MAX_BEAT_DUR, min_dur=MIN_BEAT_DUR, pause_gap=P
 
 
 def run(project_dir, source, language=None, keyterm=None, max_beat_dur=MAX_BEAT_DUR,
-        provider_name=None):
+        provider_name=None, asr_model="small", device="cpu"):
     os.makedirs(project_dir, exist_ok=True)
     bpath = os.path.join(project_dir, "beats.json")
 
@@ -113,12 +117,11 @@ def run(project_dir, source, language=None, keyterm=None, max_beat_dur=MAX_BEAT_
         print(f"extracting audio -> {audio_path}")
         extract_audio(source, audio_path)
 
-    prov = get_provider(provider_name)
-    print("uploading audio for ASR...")
-    audio_url = prov.upload(audio_path)
-    print("transcribing (xai/stt-v1)...")
-    result = atlas_cloud.transcribe(audio_url, language=language,
-                                    keyterm=keyterm.split(",") if keyterm else None)
+    if os.path.exists(bpath):
+        raise FileExistsError("beats.json exists; use a new output directory to preserve edits")
+    print(f"transcribing locally ({asr_model})...")
+    result = transcribe(audio_path, os.path.join(project_dir, ".libtv", "asr"),
+                        language=language, keyterm=keyterm, model=asr_model, device=device)
     words = result.get("words", [])
     if not words:
         raise SystemExit("ASR returned no word timestamps -- check the source audio")
@@ -136,17 +139,17 @@ def run(project_dir, source, language=None, keyterm=None, max_beat_dur=MAX_BEAT_
     doc = {
         "project": os.path.basename(project_dir.rstrip("/")),
         "mode": "aroll",
+        "provider": "libtv",
         "source_video": os.path.abspath(source),
         "language": result.get("language") or language or "en",
         "aspect": aspect,
         "style": "collage",
         "theme": None,                                    # fill in after a style bake-off
-        "video_model": "google/gemini-omni-flash/video-edit",
-        "video_model_fallback": "bytedance/seedance-2.0/reference-to-video",
+        "video_model": "Seedance 2.5",
         "transcript": result.get("text", ""),
         "beats": beats,
     }
-    with open(bpath, "w") as f:
+    with open(bpath, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
     print(f"wrote {len(beats)} beats -> {bpath}")
     print("review/edit theme + content_beats, then run aroll_clips.py "
@@ -161,6 +164,8 @@ if __name__ == "__main__":
     ap.add_argument("--keyterm", default=None, help="comma-separated names/terms to bias ASR toward")
     ap.add_argument("--max-beat-dur", type=float, default=MAX_BEAT_DUR)
     ap.add_argument("--provider", default=None)
+    ap.add_argument("--asr-model", default="small")
+    ap.add_argument("--device", default="cpu")
     a = ap.parse_args()
     run(os.path.abspath(a.project_dir), a.source, language=a.language, keyterm=a.keyterm,
-        max_beat_dur=a.max_beat_dur, provider_name=a.provider)
+        max_beat_dur=a.max_beat_dur, provider_name=a.provider, asr_model=a.asr_model, device=a.device)

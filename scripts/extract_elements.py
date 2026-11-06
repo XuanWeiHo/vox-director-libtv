@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""
-Extract independent collage elements from a static card (the core of the
-"motion collage" pipeline — animating 26 cut-out pieces, not one whole card).
-
-Reads <project>/elements_spec.json:
-  {"card": "<png>", "elements": [{"name","bbox":[x0,y0,x1,y1],"mode":"cutout|crop"}]}
- - crop : rectangle crop kept as-is (newspaper strips / text blocks)
- - cutout: crop -> youchuan remove-background -> transparent PNG (figures/trophies/stickers)
-
-Saves elements/<name>.png (RGBA). Usage: python3 extract_elements.py <project_dir>
-"""
+"""Crop collage elements and optionally remove their backgrounds with local rembg."""
 import json
 import os
 import sys
@@ -18,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 from provider import get_provider, run_jobs
 
-RMBG = "youchuan/v8.1/remove-background"
+RMBG = "local-rembg"
 
 
 def apply_erase(elem, bbox, erase):
@@ -38,11 +28,11 @@ def apply_erase(elem, bbox, erase):
 
 
 def run(project_dir):
-    spec = json.load(open(os.path.join(project_dir, "elements_spec.json")))
+    spec = json.load(open(os.path.join(project_dir, "elements_spec.json"), encoding="utf-8-sig"))
     card = Image.open(spec["card"]).convert("RGBA")
     ed = os.path.join(project_dir, "elements"); os.makedirs(ed, exist_ok=True)
 
-    prov = get_provider(spec.get("provider"))
+    prov = get_provider(spec.get("provider"), project_dir, config=spec)
     for el in spec["elements"]:
         name, bbox, mode = el["name"], el["bbox"], el.get("mode", "crop")
         crop = card.crop(tuple(bbox))
@@ -50,7 +40,7 @@ def run(project_dir):
         crop.save(raw)
         out = os.path.join(ed, f"{name}.png")
         if mode == "cutout":
-            url = prov.upload(raw)
+            url = raw
             res = run_jobs(prov, {name: lambda u=url: prov.remove_bg(RMBG, u)},
                            poll_s=3, stall_s=60, max_retries=2, deadline_s=180)[name]
             if res:
@@ -65,7 +55,7 @@ def run(project_dir):
         el["file"] = out
         el["size"] = list(crop.size)
 
-    json.dump(spec, open(os.path.join(project_dir, "elements_spec.json"), "w"),
+    json.dump(spec, open(os.path.join(project_dir, "elements_spec.json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=2)
     print("done ->", ed)
 

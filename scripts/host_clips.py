@@ -1,31 +1,14 @@
 #!/usr/bin/env python3
-"""
-Host stage 2: animate both plates, adopt the presenter's own audio, key and stack.
-
-  person plate -> Seedance 2.0 reference-to-video, driven by the beat's narration
-  world plate  -> Gemini Omni image-to-video (flat paper-collage motion, camera locked)
-  composite    -> chroma-key the green out of the person clip, overlay on the world clip
-
-Three rules in here each came from a failed run (details: references/host-mode.md):
-  1. The audio handed to Seedance is padded to EXACTLY the video length.
-  2. The beat's audio then becomes Seedance's OWN output track, not the original narration —
-     Seedance re-times the reference audio, so laying the original back over the video builds
-     in a ~0.4s error that no constant shift can remove.
-  3. The finished shot is never time-stretched (assemble.py honours kind == "host").
-
-This spends money. Without --yes it only prints the plan and an estimate; show that to the
-user, and re-run with --yes once they agree.
-
-Usage: python3 host_clips.py <project_dir> [only_ids] [--yes] [--redo]
-       --redo regenerates the videos even if clips already exist (re-composite is always free)
-"""
+"""Animate LibTV person and world plates; adopt generated speech and compose without retiming."""
 import json
 import os
 import subprocess
 import sys
+import hashlib
+from libtv_provider import digest
 
 from host import (CHROMA, DEFAULT_WORLD_MOTION, PERSON_VIDEO_PROMPT, WORLD_VIDEO_PROMPT,
-                  estimate, host_cfg, person_model, person_price, probe_dur,
+                  host_cfg, person_model, probe_dur,
                   reference_audio, resolve_layout, validate, video_seconds, world_model)
 from provider import get_provider, run_jobs
 
@@ -75,12 +58,12 @@ def composite(person, world, dest, size, similarity=0.20, blend=0.06):
 
 def run(project_dir, only=None, confirmed=False, redo=False):
     bpath = os.path.join(project_dir, "beats.json")
-    with open(bpath) as f:
+    with open(bpath, encoding="utf-8-sig") as f:
         doc = json.load(f)
     shots = [t for t in validate(doc, need_audio=True) if not only or t[2] in only]
     aspect = doc.get("aspect", "16:9")
     layout = resolve_layout(doc)
-    size = RES[aspect]
+    size = doc.get("output_size") or RES[aspect]
     cfg = host_cfg(doc)
     pmodel, wmodel = person_model(doc), world_model(doc)
     plates_dir = os.path.join(project_dir, "clips", "plates")
@@ -94,28 +77,37 @@ def run(project_dir, only=None, confirmed=False, redo=False):
 
     # ---- plan + cost gate ----
     seconds = {k: video_seconds(probe_dur(reference_audio(b))) for b, _, k in shots}
+    signatures = {}
+    for beat, shot, key in shots:
+        with open(reference_audio(beat), "rb") as stream:
+            audio_hash = hashlib.sha256(stream.read()).hexdigest()
+        signatures[(key, "person_clip")] = digest({"plate": shot["person_plate_url"],
+             "audio": audio_hash, "seconds": seconds[key], "model": pmodel,
+             "resolution": doc.get("video_resolution", "720p"), "layout": layout, "cfg": cfg})
+        signatures[(key, "world_clip")] = digest({"plate": shot["world_plate_url"],
+             "seconds": seconds[key], "model": wmodel, "layout": layout,
+             "motion": shot.get("element_motion"), "resolution": doc.get("video_resolution", "720p")})
 
-    def need(shot, field):
+    def need(shot, field, key):
         """Generate this clip unless it is already on disk (--redo forces)."""
-        return redo or not os.path.exists(shot.get(f"{field}_path") or "")
+        return (redo or not os.path.exists(shot.get(f"{field}_path") or "") or
+                shot.get(f"{field}_signature") != signatures[(key, field)])
 
-    person_s = {k: seconds[k] for _, s, k in shots if need(s, "person_clip")}
-    world_s = {k: seconds[k] for _, s, k in shots if need(s, "world_clip")}
+    person_s = {k: seconds[k] for _, s, k in shots if need(s, "person_clip", k)}
+    world_s = {k: seconds[k] for _, s, k in shots if need(s, "world_clip", k)}
     print("host clips plan:")
     for _, _, k in shots:
         what = [n for n, d in (("person", person_s), ("world", world_s)) if k in d]
         print(f"  [{k}] {seconds[k]}s clip: " + (f"generate {' + '.join(what)}" if what
                                               else "reuse existing clips (re-composite only)"))
     if person_s or world_s:
-        lines, total = estimate(person_s, world_s, person_price(pmodel))
-        print(f"person model: {pmodel}\nworld model:  {wmodel}\nestimate (prices from 2026-07-30 official pages — verify):")
-        print("\n".join(lines))
-        print(f"  TOTAL ~ ${total:.2f}")
+        print(f"person model: {pmodel}\nworld model: {wmodel}")
+        print("LibTV charges follow the active account and current model pricing.")
         if not confirmed:
             print("\nNothing submitted. Show this estimate to the user; re-run with --yes to go.")
             return
 
-    prov = get_provider(doc.get("provider"))
+    prov = get_provider(doc.get("provider"), project_dir, config=doc)
     specs, meta = {}, {}
     for beat, shot, key in shots:
         vdur = seconds[key]
@@ -132,8 +124,7 @@ def run(project_dir, only=None, confirmed=False, redo=False):
             specs[f"{key}-person"] = (lambda p=shot["person_plate_url"], a=audio_url, v=vdur,
                                       t=prompt: prov.submit_video(
                 pmodel, t, reference_images=[p], reference_audios=[a], duration=v,
-                ratio=aspect, resolution="720p", generate_audio=True, watermark=False,
-                bitrate_mode="standard"))
+                ratio=aspect, resolution=doc.get("video_resolution", "720p"), generate_audio=True))
             meta[f"{key}-person"] = (shot, "person_clip")
         if key in world_s:
             prompt = WORLD_VIDEO_PROMPT.format(
@@ -143,7 +134,7 @@ def run(project_dir, only=None, confirmed=False, redo=False):
             specs[f"{key}-world"] = (lambda p=shot["world_plate_url"], v=vdur,
                                      t=prompt: prov.submit_video(
                 wmodel, t, image=p, duration=v, aspect_ratio=aspect,
-                resolution="720p"))
+                resolution=doc.get("video_resolution", "720p"), generate_audio=False))
             meta[f"{key}-world"] = (shot, "world_clip")
 
     done = run_jobs(prov, specs, poll_s=5, stall_s=300, max_retries=2, deadline_s=1500)
@@ -155,6 +146,7 @@ def run(project_dir, only=None, confirmed=False, redo=False):
         dest = os.path.join(plates_dir, f"{k}.mp4")
         prov.download(url, dest)
         shot[f"{field}_url"], shot[f"{field}_path"] = url, dest
+        shot[f"{field}_signature"] = signatures[(k.rsplit("-", 1)[0], field)]
         print(f"[{k}] saved {dest} ({probe_dur(dest):.2f}s)")
 
     # ---- adopt the presenter's own audio, then key + stack ----
@@ -177,7 +169,7 @@ def run(project_dir, only=None, confirmed=False, redo=False):
         shot.pop("clip_url", None)
         print(f"[{key}] composited -> {dest} ({shot['dur']}s, audio {beat['narration_dur']}s)")
 
-    with open(bpath, "w") as f:
+    with open(bpath, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
     print("updated", bpath)
 

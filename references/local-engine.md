@@ -21,7 +21,7 @@ Reads `<project>/elements_spec.json`:
  ]}
 ```
 - `crop` — rectangle kept as-is (newspaper strips, text blocks). Faster, cleaner.
-- `cutout` — crop → `youchuan/v8.1/remove-background` → transparent PNG (figures, trophies,
+- `cutout` — crop → local `rembg` → transparent PNG (figures, trophies,
   stickers).
 - `erase` — optional feathered regions to delete after cutout, in CARD coords. Needed when
   the cutout drags in a neighbor (e.g. the player cutout also grabbed the trophy → erase the
@@ -47,8 +47,10 @@ Reads `<project>/elements_spec.json`:
 - **Camera**: `cam()` = slow zoom + impact shake (exponential-decay sine on entrances) + whip
   between beats (sample from a 1.2× overscan canvas with directional blur — never affine
   translate, or you reveal black edges).
-- **Render**: Pillow draws each frame, piped as rawvideo to ffmpeg. Supports `--only` to
-  re-render selected shots.
+- **Render**: Pillow draws frames into ffmpeg. `elements_spec.json` accepts `output_size`,
+  `duration`, optional `backdrop`, and per-element `start`, `from`, `sway` or explicit
+  `keyframes`. Canvas aspect must match the source card. Set `legacy_cr7_layout: true`
+  only to reproduce the original CR7 example.
 
 ## Making the assembly reconstruct the ORIGINAL poster
 

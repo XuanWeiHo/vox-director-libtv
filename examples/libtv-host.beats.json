@@ -1,0 +1,13 @@
+{
+  "project": "paper-presenter",
+  "provider": "libtv",
+  "libtv": {"require_video_approval": true},
+  "language": "zh",
+  "aspect": "16:9",
+  "style": "collage",
+  "theme": "swiss-modern",
+  "host": {"avatar": "C:/media/presenter.png", "position": "left", "size": 0.25, "subject": "the presenter from the supplied portrait"},
+  "voice": {"language": "zh", "speed": 1.0},
+  "music": false,
+  "beats": [{"id": 1, "narration": "今天，我们一起看看纸飞机的秘密。", "shots": [{"id": "a", "kind": "host", "dur": 5, "scene": "blue sky, cream paper clouds and a paper airplane on the right, leave the left third empty, no people", "element_motion": "the clouds drift gently, the airplane bobs without changing shape"}]}]
+}

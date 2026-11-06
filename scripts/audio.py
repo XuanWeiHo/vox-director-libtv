@@ -1,126 +1,106 @@
-#!/usr/bin/env python3
-"""
-Audio stage: per-beat narration (one consistent voice) + one instrumental BGM.
-
-Narration uses xai/tts-v1 (a real multilingual TTS: named `voice_id` + language),
-so every beat is spoken in the same voice — this sidesteps Omni's clip-to-clip
-voice drift.
-
-VOICE CLONING: set `voice.clone_ref` to a local audio sample and narration
-switches to bytedance/seed-audio-1.0 with the sample as @audio1. Seed-Audio is a
-general *sound* model — bare narration gives it wildly inconsistent lengths —
-but with a pinned speaker AND the studio-clean directive baked into
-CLONE_TEMPLATE below, timing is stable (validated 2026-07-17: 62 words in
-19.3s, verbatim, one natural 0.5s pause). Per-beat generation keeps beat
-alignment robust either way.
-
-Usage: python3 audio.py <project_dir>   (default: out/tang-30s)
-"""
-import base64
+"""Per-beat LibTV narration / voice reference and instrumental BGM."""
 import json
+import math
 import os
+from pathlib import Path
 import subprocess
 import sys
-
+from media_utils import probe_duration
 from provider import get_provider, run_jobs
-
-# xai/tts-v1 is a clean, predictable multilingual TTS (named voices + language
-# select) — the default. Seed-Audio handles voice cloning (see CLONE_TEMPLATE)
-# and SFX; never hand it bare narration without a pinned speaker.
-VOICE_MODEL = "xai/tts-v1"
-CLONE_MODEL = "bytedance/seed-audio-1.0"
-MUSIC_MODEL = "minimax/music-2.6"
-
-# Every clause is load-bearing: the speaker pin + "clean dry studio vocal only"
-# block is what makes seed-audio's timing beat-alignable (without it the model
-# invents pauses and SFX). `persona` tunes delivery (documentary narrator,
-# luxury voice-over, ...); default suits explainers.
-CLONE_TEMPLATE = (
-    "**Speaker A** @audio1 keeps their own vocal timbre and speaks fluent natural "
-    "{language} with a neutral accent, upbeat pace, crisp articulation, friendly and "
-    "energetic like a {persona}. Clean dry studio vocal only — no background music, "
-    "no sound effects, no room noise or reverb. They say: \"{script}\""
-)
-LANG_NAMES = {"en": "English", "zh": "Mandarin Chinese", "ja": "Japanese",
-              "ko": "Korean", "es": "Spanish", "fr": "French", "de": "German"}
+from libtv_provider import DEFAULTS, enum_values, save_json
 
 
-def probe_dur(path: str) -> float:
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                          "-of", "csv=p=0", path], capture_output=True, text=True).stdout
-    try:
-        return float(out.strip())
-    except ValueError:
-        return 0.0
+def probe_dur(path):
+    return probe_duration(path)
 
 
-def run(project_dir: str):
-    bpath = os.path.join(project_dir, "beats.json")
-    with open(bpath) as f:
-        doc = json.load(f)
-    adir = os.path.join(project_dir, "audio")
-    os.makedirs(adir, exist_ok=True)
-
-    prov = get_provider(doc.get("provider"))
+def run(project_dir):
+    bpath = Path(project_dir) / "beats.json"
+    doc = json.loads(bpath.read_text(encoding="utf-8-sig"))
+    adir = Path(project_dir) / "audio"
+    adir.mkdir(parents=True, exist_ok=True)
+    prov = get_provider(doc.get("provider"), project_dir, config=doc)
     voice = doc.get("voice", {})
-    voice_id = voice.get("voice_id", "leo")     # named male documentary-ish voice
-    language = voice.get("language", doc.get("language", "en"))
-    speed = float(voice.get("speed", 1.0))
-
-    clone_ref = voice.get("clone_ref")          # local audio sample -> clone this voice
-    persona = voice.get("persona", "YouTube tutorial creator")
-    if clone_ref:
-        with open(clone_ref, "rb") as f:
-            ref_b64 = base64.b64encode(f.read()).decode()
-        lang_name = LANG_NAMES.get(language, language)
-
+    model = voice.get("model", DEFAULTS["video"] if voice.get("clone_ref") else DEFAULTS["voice"])
+    clone = prov.upload(voice["clone_ref"]) if voice.get("clone_ref") else None
     specs = {}
     for beat in doc["beats"]:
-        if clone_ref:
-            specs[f"narr_{beat['id']}"] = (lambda t=beat["narration"]: prov.submit_audio(
-                CLONE_MODEL,
-                text=CLONE_TEMPLATE.format(language=lang_name, persona=persona, script=t),
-                format="mp3", sample_rate=44100,
-                references=[{"audio_data": ref_b64}]))
-        else:
-            specs[f"narr_{beat['id']}"] = (lambda t=beat["narration"]: prov.submit_audio(
-                VOICE_MODEL, text=t, language=language, voice_id=voice_id,
-                codec="mp3", sample_rate=44100, speed=speed))
+        # Explicit imported audio is supported; generated audio is cached by request hash.
+        if beat.get("audio_source"):
+            source = Path(beat["audio_source"]).resolve()
+            if not source.is_file():
+                raise FileNotFoundError(source)
+            duration = probe_dur(source)
+            if beat.get("narration", "").strip() and duration < 0.25:
+                raise RuntimeError(f"Beat {beat['id']}: imported narration is effectively empty")
+            beat.update(narration_audio=str(source), narration_dur=duration)
+            continue
+        text = beat.get("narration", "")
+        if not text.strip():
+            silence = adir / f"narr_{beat['id']}.mp3"
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+                            "anullsrc=r=44100:cl=mono", "-t", "0.1", str(silence)], check=True)
+            beat.update(narration_audio=str(silence), narration_dur=0.1)
+            continue
+        params = dict(language=voice.get("language", doc.get("language", "zh")),
+                      speed=voice.get("speed", 1.0))
+        if clone:
+            language = params["language"]
+            seconds = voice.get("clone_duration") or max(4, min(30, math.ceil(len(text) / (3.5 if language == "zh" else 13) + 1)))
+            text = ("Use @audio1 as the voice timbre reference. The same speaker speaks "
+                    f"{language} in a clean dry studio voice, no music or sound effects. "
+                    "Visual: a locked-off neutral paper backdrop, no text. "
+                    "Speak the following NEW sentence exactly; do not repeat the reference words: " + text)
+            specs[f"narr_{beat['id']}"] = lambda t=text, d=seconds: prov.submit_video(
+                model, t, reference_audios=[clone], duration=d, ratio="16:9",
+                resolution="480p", generate_audio=True)
+            continue
+        elif voice.get("voice_id"):
+            params["voice_id"] = voice["voice_id"]
+        specs[f"narr_{beat['id']}"] = lambda t=text, p=params: prov.submit_audio(model, text=t, **p)
 
-    # BGM: only generate if we don't already have one (it's slow + costs more).
-    bgm_path = os.path.join(adir, "bgm.mp3")
-    if not os.path.exists(bgm_path):
-        music_prompt = doc.get("music", "cinematic majestic traditional Chinese guzheng erhu, warm")
-        specs["bgm"] = (lambda mp=music_prompt: prov.submit_audio(
-            MUSIC_MODEL, prompt=mp, is_instrumental=True, format="mp3"))
+    music = doc.get("music", "warm playful documentary instrumental, no vocals")
+    if isinstance(music, dict) and music.get("source"):
+        source = Path(music["source"]).resolve()
+        if not source.is_file():
+            raise FileNotFoundError(source)
+        doc.update(bgm_path=str(source), bgm_dur=probe_dur(source))
+    elif music is False:
+        silence = adir / "bgm-silence.mp3"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+                        "anullsrc=r=44100:cl=stereo", "-t", "1", str(silence)], check=True)
+        doc.update(bgm_path=str(silence), bgm_dur=1)
     else:
-        print(f"[bgm] reuse existing {bgm_path}")
+        cfg = music if isinstance(music, dict) else {"prompt": music}
+        music_model = cfg.get("model", DEFAULTS["music"])
+        _, schema = prov.model(music_model, "audio")
+        prop = schema["properties"].get("duration", {})
+        seconds = cfg.get("duration", sum(sum(s.get("dur", 5) for s in b.get("shots", [b]))
+                                          for b in doc["beats"]))
+        duration = seconds * 1000 if prop.get("originalField") == "music_length_ms" else seconds
+        values = [v for v in enum_values(prop) if isinstance(v, (int, float)) and v > 0]
+        if values:
+            duration = next((v for v in sorted(values) if v >= duration), max(values))
+        prompt = cfg.get("prompt", "documentary background") + ". Instrumental only, no vocals, no speech."
+        options = {"duration": duration} if prop else {}
+        specs["bgm"] = lambda: prov.submit_audio(music_model, prompt=prompt, **options)
 
-    done = run_jobs(prov, specs, poll_s=4, stall_s=150, max_retries=2, deadline_s=600)
-
-    # download + record
+    done = run_jobs(prov, specs)
     for beat in doc["beats"]:
-        url = done.get(f"narr_{beat['id']}")
-        if url:
-            dest = os.path.join(adir, f"narr_{beat['id']}.mp3")
-            prov.download(url, dest)
-            beat["narration_audio"] = dest
-            beat["narration_dur"] = round(probe_dur(dest), 2)
-            print(f"[narr {beat['id']}] {beat['narration_dur']}s -> {dest}")
-    bgm_url = done.get("bgm")
-    if bgm_url:
-        bgm = os.path.join(adir, "bgm.mp3")
-        prov.download(bgm_url, bgm)
-        doc["bgm_path"] = bgm
-        doc["bgm_dur"] = round(probe_dur(bgm), 2)
-        print(f"[bgm] {doc['bgm_dur']}s -> {bgm}")
-
-    with open(bpath, "w") as f:
-        json.dump(doc, f, ensure_ascii=False, indent=2)
-    print("updated", bpath)
+        ref = done.get(f"narr_{beat['id']}")
+        if ref:
+            dest = adir / f"narr_{beat['id']}.mp3"
+            prov.download(ref, dest)
+            if probe_dur(dest) < 0.25:
+                raise RuntimeError(f"Beat {beat['id']}: generated narration is effectively empty; inspect the input text")
+            beat.update(narration_audio=str(dest), narration_audio_url=ref,
+                        narration_dur=round(probe_dur(dest), 3))
+    if done.get("bgm"):
+        dest = adir / "bgm.mp3"
+        prov.download(done["bgm"], dest)
+        doc.update(bgm_path=str(dest), bgm_dur=probe_dur(dest))
+    save_json(bpath, doc)
 
 
 if __name__ == "__main__":
-    proj = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-        os.path.dirname(__file__), "..", "out", "tang-30s")
-    run(os.path.abspath(proj))
+    run(os.path.abspath(sys.argv[1]))

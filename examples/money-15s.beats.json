@@ -6,14 +6,14 @@
   "style": "collage",
   "theme": "american-retro",
   "arc": "hook_payoff",
-  "video_model": "google/gemini-omni-flash/image-to-video",
+  "video_model": "Seedance 2.5",
   "voice": {
-    "voice_id": "leo",
+    "model": "Minimax-speech-2.8-hd",
     "language": "en",
     "speed": 1.0
   },
   "music": "short punchy cinematic build, driving percussion, resolves on a warm chord, instrumental",
-  "watermark": "Made with Atlas Cloud",
+  "watermark": "Vox Director · LibTV",
   "beats": [
     {
       "id": 1,
@@ -74,6 +74,9 @@
       ]
     }
   ],
-  "bgm_path": "/Users/qiutian/Projects/skills/vox-director/out/money-15s/audio/bgm.mp3",
-  "bgm_dur": 15.33
+  "provider": "libtv",
+  "image_model": "General image V2",
+  "libtv": {
+    "require_video_approval": true
+  }
 }

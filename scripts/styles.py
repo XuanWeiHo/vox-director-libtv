@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""
-Per-era style bible for vox-director (validated on Atlas Cloud / Nano Banana 2).
-
-Each STYLE_BASE is scene-agnostic: it fixes ONLY the visual idiom of a dynasty.
-compose_keyframe_prompt() appends the beat's scene + a shared bilingual
-title/seal treatment so the whole film stays coherent while the style evolves.
-"""
+"""Reusable paper-collage style presets and creative prompt composition."""
 
 # The "evolution" arc: the visual idiom evolves with the civilization.
 STYLE_BASES = {
@@ -154,71 +148,14 @@ def resolve_theme(name):
     return THEME_PRESETS.get(name)
 
 
-# GPT-Image takes absolute size + quality; nano-banana/seedream/etc take aspect_ratio + resolution.
-_GPT_SIZE = {
-    "16:9": {"1k": "1536x1024", "2k": "2048x1152", "4k": "3840x2160"},
-    "9:16": {"1k": "1024x1536", "2k": "1152x2048", "4k": "2160x3840"},
-    "1:1":  {"1k": "1024x1024", "2k": "2048x2048", "4k": "2048x2048"},
-    "3:4":  {"1k": "768x1024",  "2k": "2160x2880", "4k": "2160x2880"},
-    "4:3":  {"1k": "1024x768",  "2k": "2880x2160", "4k": "2880x2160"},
-}
-_GPT_QUALITY = {"1k": "medium", "2k": "high", "4k": "high"}
-
-
 def image_params(model, aspect="16:9", resolution="1k"):
-    """Per-model text-to-image params. GPT-Image needs size+quality; most other
-    text-to-image models (nano-banana, seedream, ...) take aspect_ratio + resolution."""
-    if "gpt-image" in model:
-        return {"size": _GPT_SIZE.get(aspect, {}).get(resolution, "1024x1024"),
-                "quality": _GPT_QUALITY.get(resolution, "medium")}
+    """Provider-neutral image parameters; the LibTV backend validates the schema."""
     return {"aspect_ratio": aspect, "resolution": resolution}
 
 
-# ---- Video-model aspect routing -------------------------------------------------
-# Each video model natively accepts a fixed enum of aspect ratios, or none at all
-# (it just follows whatever the input image/video already is). None = "follows input".
-VIDEO_ASPECT_SUPPORT = {
-    "gemini-omni-flash/image-to-video": ["16:9", "9:16"],
-    "gemini-omni-flash/video-edit": None,
-    "seedance-2.0/reference-to-video": ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21", "adaptive"],
-    "kling-video-o3-pro/reference-to-video": ["16:9", "9:16", "1:1"],
-    "kling-video-o3-pro/image-to-video": None,
-    "kling-video-o3-pro/video-edit": None,
-}
-
-
-def _aspect_value(aspect):
-    w, h = aspect.split(":")
-    return float(w) / float(h)
-
-
 def resolve_video_aspect(project_aspect, model):
-    """Route the project's target aspect (`doc["aspect"]`) to what `model` actually
-    accepts. Rule (Kiana, 2026-07-16): prefer the exact same ratio as the project's
-    target; if the model has no matching enum value, fall back to the nearest one —
-    but that fallback is an approximation and the caller MUST surface it for human
-    confirmation before generating (see clips.py), never apply it silently. Every
-    shot in one project run resolves through this same function with the same
-    project_aspect, so a finished film never mixes aspect ratios across clips.
-
-    Returns (resolved_aspect_or_None, exact). resolved_aspect is None when the model
-    has no enum at all (it just follows the input, nothing to pass/confirm).
-    """
-    support = None
-    for key, enum in VIDEO_ASPECT_SUPPORT.items():
-        if key in model:
-            support = enum
-            break
-    if support is None:                  # unknown model, or a "follows input" model
-        return None, True
-    if project_aspect in support:
-        return project_aspect, True
-    if project_aspect == "adaptive":
-        return ("adaptive" if "adaptive" in support else support[0]), True
-    target = _aspect_value(project_aspect)
-    nearest = min((a for a in support if a != "adaptive"),
-                  key=lambda a: abs(_aspect_value(a) - target))
-    return nearest, False
+    """LibTV provider checks the requested ratio against the live schema."""
+    return project_aspect, True
 
 
 def _headline(title_cn, title_en, style, type_style=None):

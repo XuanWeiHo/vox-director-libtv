@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""
-Keyframe stage: one styled keyframe per SHOT.
-
-Each beat holds one or more shots (different framings of the same narration
-beat) so the cut has variety. Falls back to one implicit shot per beat if a
-beat has no "shots". Generates concurrently, downloads to
-<project>/keyframes/kf_<beat><shot>.jpg, records url+path onto each shot.
-
-Usage: python3 keyframes.py <project_dir>   (default: out/tang-30s)
-"""
+"""Generate one LibTV collage keyframe per shot and persist its local path and node reference."""
 import json
 import os
 import sys
@@ -16,7 +7,7 @@ import sys
 from provider import get_provider, run_jobs
 from styles import compose_keyframe_prompt, compose_collage_prompt, resolve_theme, image_params
 
-IMAGE_MODEL = "google/nano-banana-2/text-to-image"
+IMAGE_MODEL = "General image V2"
 
 
 def shots_of(beat):
@@ -30,7 +21,7 @@ def shots_of(beat):
 
 def run(project_dir):
     bpath = os.path.join(project_dir, "beats.json")
-    with open(bpath) as f:
+    with open(bpath, encoding="utf-8-sig") as f:
         doc = json.load(f)
     aspect = doc.get("aspect", "16:9")
     img_model = doc.get("image_model", IMAGE_MODEL)   # default nano-banana-2; e.g. openai/gpt-image-2/text-to-image
@@ -46,7 +37,7 @@ def run(project_dir):
     kf_dir = os.path.join(project_dir, "keyframes")
     os.makedirs(kf_dir, exist_ok=True)
 
-    prov = get_provider(doc.get("provider"))
+    prov = get_provider(doc.get("provider"), project_dir, config=doc)
     specs, by_key = {}, {}
     for beat in doc["beats"]:
         for shot, key in shots_of(beat):
@@ -56,7 +47,7 @@ def run(project_dir):
                 continue
             scene = shot["scene"]
             if style == "collage":
-                prompt = compose_collage_prompt(scene, beat["title_cn"], beat["title_en"],
+                prompt = compose_collage_prompt(scene, beat.get("title_cn", ""), beat.get("title_en", ""),
                                                 beat.get("bg", "warm ochre"), aspect,
                                                 with_title=shot.get("title", True),
                                                 style=collage_style, palette=t_palette,
@@ -81,7 +72,7 @@ def run(project_dir):
         shot["keyframe_path"] = dest
         print(f"[{key}] saved {dest}")
 
-    with open(bpath, "w") as f:
+    with open(bpath, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
     print("updated", bpath)
 

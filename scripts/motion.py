@@ -152,8 +152,21 @@ class Confetti:
 def build_act(project_dir, W, H):
     """Elements fly back to their ORIGINAL positions on the card (canvas 3:4),
     so the assembled frame reconstructs the original poster."""
-    els = {e["name"]: e["file"] for e in
-           json.load(open(os.path.join(project_dir, "elements_spec.json")))["elements"]}
+    spec = json.load(open(os.path.join(project_dir, "elements_spec.json"), encoding="utf-8-sig"))
+    if not spec.get("legacy_cr7_layout", False):
+        card_w, card_h = Image.open(spec["card"]).size
+        if abs(W / H - card_w / card_h) > 0.01:
+            raise ValueError("Motion canvas must match the source card aspect ratio")
+        scale = W / card_w
+        layers = []
+        for i, element in enumerate(spec["elements"]):
+            x0, y0, x1, y1 = element["bbox"]
+            x, y = (x0 + x1) * scale / 2, (y0 + y1) * scale / 2
+            keys = element.get("keyframes") or fly_in(element.get("start", 0.15 + i * 0.25),
+                        x, y, W, H, element.get("from", "L" if i % 2 else "R"), s=scale)
+            layers.append(Layer(element["file"], keys, sway=element.get("sway", 0.5)))
+        return layers
+    els = {e["name"]: e["file"] for e in spec["elements"]}
     S = W / 768.0                    # card is 768 wide; scale elements to canvas
     # original centers on card * S  ->  (x, y)
     P = {"crest": (255, 238), "seven": (215, 575), "ronaldo": (666, 647),
@@ -184,7 +197,18 @@ def cam(t, T):
 
 
 def render(project_dir, W=1080, H=1440, fps=24, secs=5.5):
-    backdrop = Image.open(os.path.join(project_dir, "base_backdrop.png")).convert("RGBA").resize((W, H))
+    spec = json.load(open(os.path.join(project_dir, "elements_spec.json"), encoding="utf-8-sig"))
+    W, H = spec.get("output_size", (W, H))
+    secs = spec.get("duration", secs)
+    bg = spec.get("backdrop") or os.path.join(project_dir, "base_backdrop.png")
+    if os.path.exists(bg):
+        backdrop = Image.open(bg).convert("RGBA").resize((W, H))
+    else:
+        backdrop = Image.open(spec["card"]).convert("RGBA")
+        for element in spec["elements"]:
+            box = tuple(element["bbox"])
+            backdrop.paste(backdrop.crop(box).filter(ImageFilter.GaussianBlur(18)), box)
+        backdrop = backdrop.resize((W, H))
     layers = build_act(project_dir, W, H)
     conf = Confetti(W, H, n=30)
     out = os.path.join(project_dir, "act.mp4")
@@ -207,7 +231,9 @@ def render(project_dir, W=1080, H=1440, fps=24, secs=5.5):
         cx = max(0, min(zw - W, cx)); cy = max(0, min(zh - H, cy))
         frame = frame.crop((cx, cy, cx + W, cy + H))
         p.stdin.write(frame.tobytes())
-    p.stdin.close(); p.wait()
+    p.stdin.close()
+    if p.wait():
+        raise RuntimeError("ffmpeg motion render failed")
     print("FINAL:", out, f"({n}f {W}x{H})")
 
 

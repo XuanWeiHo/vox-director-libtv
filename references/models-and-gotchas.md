@@ -1,91 +1,37 @@
-# Models & Gotchas
+# LibTV 模型与执行细节
 
-Everything here was learned the hard way while building this pipeline. Read it before
-debugging — most failures are already solved below.
+## 模型发现
 
-## Model selection (verify IDs live first)
+`libtv model search -t image` / `video` / `audio` 查询目录，`libtv model "展示名"` 查询 schema。
+默认图片为 General image V2，视频为 Seedance 2.5，配音为 Minimax-speech-2.8-hd，音乐为 Eleven Music V3。可在 beats.json 覆盖，模型不可用时明确报错，不静默换模型。
 
-`GET https://api.atlascloud.ai/api/v1/models` (no auth) → keep only `display_console: true`.
-Model schemas live at `https://static.atlascloud.ai/model/schema/<id-with-slashes-as-dashes>.json`
-under `components.schemas.Input`.
+模型参数按 schema 验证。图片的 resolution 映射为 quality（如 1K）；视频 duration 的范围由实时 schema 决定。音乐的 duration 可能以毫秒计。视频编辑使用源视频的自适应比例与时长，不把普通生成参数当作编辑参数。
 
-| Job | Model | Price | Why |
-|---|---|---|---|
-| Keyframe / collage poster | `google/nano-banana-2/text-to-image` | ~$0.08 | best CN+EN text rendering; layered look |
-| Animate — non-real content | `google/gemini-omni-flash/image-to-video` | ~$0.13 | keeps on-screen text stable, layered/parallax motion |
-| Animate — **real people/brands** | `kwaivgi/kling-video-o3-pro/image-to-video` | ~$0.095 | the ONLY one that allows celebrities/logos |
-| Element cut-out (advanced) | `youchuan/v8.1/remove-background` | ~$0.086 | `image`=URL, submit via `generateImage` |
-| Narration | `xai/tts-v1` | ~$0.015 | clean multilingual TTS; `voice_id`, `language`, `speed` |
-| Music | `minimax/music-2.6` | ~$0.11 | `is_instrumental: true`; returns ~2min, trim in mix |
-| SFX (whoosh, ambience) | `bytedance/seed-audio-1.0` | ~$0.015 | describe the sound in the `text` field |
+## CLI 1.1.3 的真实返回
 
-### Content blocks (architecture-level, verified)
-Feeding a recognizable **real celebrity + brand logos** into a video model:
-- `gemini-omni-flash` (both image-to-video AND reference-to-video) → **blocked**:
-  "The prompt is blocked due to prohibited contents". Removing the name from the prompt,
-  converting PNG→JPG, or using a face-less silhouette does NOT help — it's the image content.
-- `bytedance/seedance-2.0` → **blocked**: "Content suspected of infringing digital rights"
-  (only an abstract silhouette passed).
-- `kwaivgi/kling-video-o3-pro` → **allows it.** Use Kling for real people.
-- The **local keyframe engine never hits this** (no video model in the loop) — the other way
-  through for real-person content.
+- 无引用创建返回 nodeKey；创建并连线返回 newNodeKey 和 reactFlowNode。
+- `--run` 会等待结束，输出可能包含多段 JSON 和进度日志；使用最终节点 taskInfo 和媒体 url 验证。
+- `download` 成功通常输出文件路径，不是 JSON；验证实际下载文件，并按目标格式转换。
+- `-s quality=1K` 可自动分配到 settings。不要使用 `-s settings.quality=1K`，当前版本把它视为非法字段。
+- 音频节点要显式指定 schema 的 scene，例如 Text-to-Speech 或 Music。
+- 引用使用真实项目节点和 `--left`，不能直接写 audioList/imageList 等派生字段。
+- `{{Node <nodeKey>}}` 是 CLI 的正式提示词引用语法。旧模板中的 @image1 等须映射到对应节点。
+- schema 存在某模式不保证 CLI 连线规则允许该模式；Seed Audio 的音频→音频引用在当前 CLI 中会被拒绝，见 voices.md。
 
-### Voice: seed-audio needs a pinned speaker (then it's beat-stable)
-`bytedance/seed-audio-1.0` is a general *audio-scene* model, not a plain TTS. Given bare
-narration with no pinned voice it adds pauses/SFX and produced wildly inconsistent lengths
-(same 3 lines: 22s / 14s / 12s vs xai-tts's clean 8.6 / 10.2 / 9.0s). **But pinned, it is
-beat-alignable** — validated 2026-07-17 with the voice-clone template in `audio.py`
-(pinned **Speaker A** @audio1 + "clean dry studio vocal only — no background music, no
-sound effects, no room noise or reverb"): 62 words rendered in 19.3s, verbatim, one natural
-0.5s pause. The earlier "rhythm doesn't match the beats" failures were the bare-narration
-usage, not the model. Default to `xai/tts-v1` for narration; reach for seed-audio for
-voice cloning (`voice.clone_ref` → `references` payload), Chinese-specific voices, or SFX
-like transition whooshes — and always derive final timing from the ACTUAL audio (ASR word
-timestamps), never from the script.
+## 恢复
 
-## API gotchas (Atlas, behind a proxy)
+请求以参数、引用、镜头标签和 generation_revision 的 SHA-256 标识；先写本地 journal，再创建节点并运行。进程锁阻止同一项目被两个脚本同时写入。
 
-1. **Every request MUST send a real `User-Agent` header** — default Python `urllib` UA is
-   blocked by the WAF → 403 Forbidden. (`scripts/atlas_cloud.py` sets one.)
-2. **Download generated assets with curl, not urllib** — the OSS host behind the local proxy
-   kills `urlretrieve` with `RemoteDisconnected`.
-3. **Audio/TTS/music/video all submit via `POST /api/v1/model/generateVideo`**, image &
-   background-removal via `/generateImage`; poll `/model/prediction/{id}`.
-   (A playbook noted a `/generateAudio` endpoint — go by what the live schema/API accepts.)
-4. **A failed generation makes the prediction GET return HTTP 500** (not a clean
-   `status:failed`) — treat a persistent 500 on poll as a failure, and read `message` for the
-   reason.
-5. POST generation calls are **not** retried (they create billable tasks); GET polls are.
+若 CLI 退出或连接中断：保留日志，重新执行原阶段，回读原节点。节点已完成则恢复输出；仍在运行或结果未知则报错并停止。不得因为超时再次 `--run`。
 
-## ffmpeg gotchas (this machine's build)
+创建 / 上传回执丢失可按日志中的确定名称查找原节点。只有确认没有生成被接受后才能人为修复 prepared 状态。不要删除 journal 强制重投。
 
-The local ffmpeg is minimal: **no libass, no drawtext** (no libfreetype). So:
-- **Captions & watermark → render PNGs with Pillow and composite via `overlay`**
-  (`scripts/text_overlay.py`). Size text by `min(W,H)` so it works in 16:9 and 9:16.
-- **Off-aspect clips** (e.g. a 3:4 card in a 9:16 frame): use a blurred-cover background +
-  fitted sharp foreground via `overlay`, not black bars.
-- **Slow, don't freeze**: if a clip is shorter than its narration-driven segment, stretch it
-  with `setpts` to fill instead of `tpad` freezing the last frame.
-- **`blend` needs both inputs in the same pixel format** — convert both to `gbrp` before a
-  `screen` blend (confetti overlay) or the whole frame turns magenta.
-- **`sidechaincompress` output length follows its sidechain** — `apad` the narration track to
-  the full duration, or `-shortest` will cut a music-only ending (e.g. a scrapbook outro).
-- **Whip transitions**: `xfade` slides between shots; recompute each beat's start time
-  (each transition overlaps by the transition duration) so narration/captions stay in sync.
-- **Verify by extracting frames** — you can't read an mp4's content. `mjpeg` refuses
-  full-range YUV, so add `format=yuvj420p` when grabbing jpgs.
+模型明确拒绝或参数错误时修改具体条件，再重新生成。不要无条件切换模型或对内容拒绝进行绕过。
 
-## Host mode (Seedance reference-to-video + Omni, keyed)
+## Windows 与成片
 
-- Seedance takes `reference_images` / `reference_audios` (not `images`), `ratio` (not
-  `aspect_ratio`), and a reference audio of 2-15 s. Omni takes `image` + `aspect_ratio` and is
-  only verified to 10 s.
-- Pricing units differ and the catalog `base_price` is NOT a per-second price: Seedance is
-  billed per token (720p about $0.194/s after promo, list $0.2429), Omni $0.13/s with a 3 s
-  minimum, nano-banana by resolution (1k $0.08, 2k $0.12). Read the model page, not the field.
-- Full recipe and rules: `references/host-mode.md`.
+JSON 和源码使用 UTF-8；从 PowerShell 写含中文的文件时使用 UTF-8，不用默认 ASCII 管道。执行 Python 用脚本文件或参数；若确需管道先设置 `$OutputEncoding = [System.Text.UTF8Encoding]::new($false)`。
 
-## Cost
+concat 清单使用正斜杠路径并转义单引号。中文字体缺失会明确报错，可设 VOX_FONT。下载后的 MP3 真实转码，不只是改扩展名。
 
-A ~30s standard film ≈ **$0.8–1.0** (6 keyframes + 6 clips + VO + music). The element-level
-advanced path is pricier (~$1.5) because of ~15 background-removal calls.
+ASR 通过 ffmpeg 解码为 16kHz float32，再送 faster-whisper，避免 PyAV 版本 API 差异。所有时间戳取自实际音频。A-roll 不允许缺片段或明显时长不匹配。

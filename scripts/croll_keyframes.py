@@ -1,35 +1,5 @@
 #!/usr/bin/env python3
-"""
-C-roll keyframe stage: anchor ONE still photo (a person or a product shot)
-inside generated collage posters — "cutout roll".
-
-Where A-roll re-styles a talking-head VIDEO (performance preserved) and B-roll
-generates posters from TEXT alone, C-roll takes a single PHOTO: the subject is
-cut out as a PHOTOGRAPHIC sticker (never redrawn) and the collage world is
-generated around it per beat, via an image-EDIT model. The posters then animate
-through the normal clips.py stage — this script also writes an `anchor_freeze`
-guard into beats.json so the motion prompts keep the subject frozen.
-
-Validated 2026-07-17 on two real productions (a product bottle; a portrait →
-paper-doll explainer). Three hard-won prompt rules are baked in below:
-  1. Poses/expressions must be expressed by the BODY only — asking the model
-     to change the face (a wink, a smile) makes it redraw the face.
-  2. Halftone/print texture bleeds onto the face unless you explicitly scope
-     it to the background.
-  3. For portraits, clothing must be locked too, or the paper-doll body drifts.
-And one from the product run: label typography survives the edit but can be
-re-lettered by the VIDEO stage — hence the LABEL/FACE FREEZE line that this
-script hands to clips.py.
-
-beats.json additions (see SKILL.md "C-roll mode"):
-  "mode": "croll",
-  "anchor_photo": "path/to/photo.png",       # local path or URL
-  "croll_subject": "portrait" | "product",
-  "subject_wardrobe": "her cream knitted sweater and charcoal trousers",  # portrait only
-  "subject_desc": "the perfume bottle",       # product only (short noun phrase)
-
-Usage: python3 croll_keyframes.py <project_dir>
-"""
+"""Anchor a supplied photograph in a collage using LibTV image references."""
 import json
 import os
 import sys
@@ -37,7 +7,7 @@ import sys
 from provider import get_provider, run_jobs
 from styles import compose_collage_prompt, resolve_theme, image_params
 
-EDIT_MODEL = "google/nano-banana-2/edit"   # fallback: openai/gpt-image-2/edit
+EDIT_MODEL = "General image V2"   # fallback: openai/gpt-image-2/edit
 
 FACE_LOCK = (
     "The person's face and hair from the attached photo are cut out as a PHOTOGRAPHIC "
@@ -93,7 +63,7 @@ def shots_of(beat):
 
 def run(project_dir):
     bpath = os.path.join(project_dir, "beats.json")
-    with open(bpath) as f:
+    with open(bpath, encoding="utf-8-sig") as f:
         doc = json.load(f)
     photo = doc["anchor_photo"]
     aspect = doc.get("aspect", "9:16")
@@ -105,7 +75,7 @@ def run(project_dir):
     kf_dir = os.path.join(project_dir, "keyframes")
     os.makedirs(kf_dir, exist_ok=True)
 
-    prov = get_provider(doc.get("provider"))
+    prov = get_provider(doc.get("provider"), project_dir, config=doc)
     photo_url = photo if photo.startswith("http") else prov.upload(photo)
     doc["anchor_photo_url"] = photo_url
     doc["anchor_freeze"] = FREEZE[kind]
@@ -139,7 +109,7 @@ def run(project_dir):
         shot["keyframe_path"] = dest
         print(f"[{key}] saved {dest}")
 
-    with open(bpath, "w") as f:
+    with open(bpath, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
     print("updated", bpath)
 

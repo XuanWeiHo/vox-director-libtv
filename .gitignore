@@ -1,5 +1,7 @@
 # generated video projects (data output, not source) — can be hundreds of MB
 out/
+.libtv/
+*.skill
 
 # python
 __pycache__/

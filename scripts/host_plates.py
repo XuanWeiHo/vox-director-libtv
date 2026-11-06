@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""
-Host stage 1: the two STILLS for every host shot.
-
-  person plate  the presenter image carried over verbatim as a cut-out print on flat chroma
-                green (nano-banana-2/edit)
-  world plate   the collage world with the presenter's area left empty and no people in it
-                (nano-banana-2/text-to-image, same theme as the rest of the film)
-
-Look at both before running host_clips.py — the plates are the cheap checkpoint (~$0.24 per
-shot). Check that the green is flat and even, the face is the presenter's and not a redraw,
-and the world has nothing in the empty region.
-
-Usage: python3 host_plates.py <project_dir> [only_ids] [--redo]
-       only_ids is a comma list of shot keys, e.g. 1a,7a
-"""
+"""Generate referenced presenter and independent collage-world plates through LibTV."""
 import json
 import os
 import sys
@@ -26,7 +12,7 @@ from styles import compose_collage_prompt, image_params, resolve_theme
 
 def run(project_dir, only=None, redo=False):
     bpath = os.path.join(project_dir, "beats.json")
-    with open(bpath) as f:
+    with open(bpath, encoding="utf-8-sig") as f:
         doc = json.load(f)
     shots = validate(doc)
     aspect = doc.get("aspect", "16:9")
@@ -38,11 +24,11 @@ def run(project_dir, only=None, redo=False):
     kf_dir = os.path.join(project_dir, "keyframes")
     os.makedirs(kf_dir, exist_ok=True)
 
-    prov = get_provider(doc.get("provider"))
+    prov = get_provider(doc.get("provider"), project_dir, config=doc)
     if cfg.get("_avatar_src") == cfg["avatars"] and cfg.get("_avatar_urls"):
         avatar_urls = cfg["_avatar_urls"]                 # cached upload, same source images
     else:
-        avatar_urls = [a if a.startswith("http") else prov.upload(os.path.expanduser(a))
+        avatar_urls = [a if a.startswith(("http", "libtv://")) else prov.upload(os.path.expanduser(a))
                        for a in cfg["avatars"]]
     doc["host"]["_avatar_src"], doc["host"]["_avatar_urls"] = cfg["avatars"], avatar_urls
 
@@ -56,7 +42,7 @@ def run(project_dir, only=None, redo=False):
             continue
         if redo or not shot.get("person_plate_url"):
             specs[f"{key}-person"] = (lambda: prov.submit_image(
-                PERSON_PLATE_MODEL, person_prompt, images=avatar_urls,
+                doc.get("image_model", PERSON_PLATE_MODEL), person_prompt, images=avatar_urls,
                 **image_params(PERSON_PLATE_MODEL, aspect, img_res)))
             meta[f"{key}-person"] = (shot, "person_plate", person_prompt)
         if redo or not shot.get("world_plate_url"):
@@ -68,7 +54,7 @@ def run(project_dir, only=None, redo=False):
                 finish=theme.get("finish") or doc.get("finish"),
             ) + WORLD_PLATE_SUFFIX.format(world_clear=layout["world_clear"])
             specs[f"{key}-world"] = (lambda p=world_prompt: prov.submit_image(
-                WORLD_PLATE_MODEL, p, **image_params(WORLD_PLATE_MODEL, aspect, img_res)))
+                doc.get("image_model", WORLD_PLATE_MODEL), p, **image_params(WORLD_PLATE_MODEL, aspect, img_res)))
             meta[f"{key}-world"] = (shot, "world_plate", world_prompt)
 
     if not specs:
@@ -92,7 +78,7 @@ def run(project_dir, only=None, redo=False):
             shot.pop(stale, None)
         print(f"[{k}] saved {dest}")
 
-    with open(bpath, "w") as f:
+    with open(bpath, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
     print("updated", bpath)
     print("NEXT: open the plates in keyframes/ and check them before host_clips.py")

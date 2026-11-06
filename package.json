@@ -1,7 +1,7 @@
 {
-  "name": "vox-director",
+  "name": "vox-director-libtv",
   "version": "1.0.0",
-  "description": "Vox Director — an open-source Agent Skill that turns one topic into a finished Vox-style paper-collage explainer/ad video: script, collage keyframes, motion, voice-over, music and captions, automated end to end on the Atlas Cloud API + local ffmpeg. Works with Claude Code, Codex, and any SKILL.md agent.",
+  "description": "Vox paper-collage video skill powered by LibTV CLI, local ASR and ffmpeg.",
   "keywords": [
     "vox",
     "vox-director",
@@ -19,14 +19,9 @@
     "codex",
     "ffmpeg",
     "tts",
-    "atlas-cloud",
-    "generative-ai"
+    "generative-ai",
+    "libtv"
   ],
-  "homepage": "https://github.com/Alisa0808/vox-director",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Alisa0808/vox-director.git"
-  },
   "license": "MIT",
   "author": "Alisa0808"
 }

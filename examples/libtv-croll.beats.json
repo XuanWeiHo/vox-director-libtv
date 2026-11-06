@@ -1,0 +1,16 @@
+{
+  "project": "photo-collage",
+  "provider": "libtv",
+  "libtv": {"require_video_approval": true},
+  "mode": "croll",
+  "anchor_photo": "C:/media/product.jpg",
+  "croll_subject": "product",
+  "subject_desc": "the exact product from the reference photograph",
+  "language": "zh",
+  "aspect": "9:16",
+  "style": "collage",
+  "theme": "newsprint-editorial",
+  "voice": {"language": "zh"},
+  "music": false,
+  "beats": [{"id": 1, "narration": "熟悉的物件，也有新的故事。", "shots": [{"id": "a", "dur": 5, "title": false, "scene": "the photographic product as a cut-out sticker on cream newspaper scraps, orange paper rays and blue tape", "camera_move": "parallax", "element_motion": "paper rays fan out gently, keep the product and label unchanged"}]}]
+}

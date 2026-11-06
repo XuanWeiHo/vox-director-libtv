@@ -1,34 +1,22 @@
 #!/usr/bin/env python3
-"""
-Host mode shared module: layout table, prompt templates, validation, cost estimate.
-
-A host shot (`"kind": "host"`) is a presenter speaking the beat's narration on camera,
-lip-synced, standing inside the collage world. It is built from TWO plates generated
-separately and keyed together (see references/host-mode.md):
-
-  person plate  green-screen still of the presenter  -> Seedance 2.0 reference-to-video
-  world plate   the collage with that area left empty -> Gemini Omni image-to-video
-
-host_plates.py makes the stills, host_clips.py animates + composites them. Everything that
-depends on the frame spec lives in HOST_LAYOUTS below, so a new aspect ratio is one new
-entry here (plus a validation run) rather than an edit to the pipeline.
-"""
+"""Shared presenter layout, prompt templates and duration validation for LibTV."""
 import math
 import os
 import re
 import subprocess
+from media_utils import probe_duration
 
 # ---- models -----------------------------------------------------------------------------
-PERSON_PLATE_MODEL = "google/nano-banana-2/edit"
-WORLD_PLATE_MODEL = "google/nano-banana-2/text-to-image"
-PERSON_VIDEO_MODEL = "bytedance/seedance-2.0/reference-to-video"   # default; host.person_video_model overrides
-WORLD_VIDEO_MODEL = "google/gemini-omni-flash/image-to-video"   # default; host.world_video_model overrides
+PERSON_PLATE_MODEL = "General image V2"
+WORLD_PLATE_MODEL = "General image V2"
+PERSON_VIDEO_MODEL = "Seedance 2.5"   # default; host.person_video_model overrides
+WORLD_VIDEO_MODEL = "Seedance 2.5"   # default; host.world_video_model overrides
 
 CHROMA = "0x00B140"          # key colour as ffmpeg wants it
 CHROMA_HEX = "#00B140"       # the same colour as the prompt says it
 TAIL = 0.5                   # assemble.py's breathing room after the narration
 MIN_VIDEO_S = 4              # shortest Seedance clip we request
-MAX_VIDEO_S = 10             # Omni image-to-video is verified up to 10s (Seedance allows 15)
+MAX_VIDEO_S = 30             # Live model schema is also checked before submission.
 
 # ---- layout registry: ONE entry per supported aspect ratio ------------------------------
 # regions          position name -> (region phrase, REGION shouted in the plate prompt)
@@ -100,7 +88,7 @@ WORLD_PLATE_SUFFIX = (
 # two different pictures instead of animating the plate (correlation 0.033 vs 0.095).
 PERSON_VIDEO_PROMPT = (
     "The {subject} in @image1 speaks to camera as a documentary host, their lips synced "
-    "precisely to audio 1. Their face, features, face shape, skin and hair stay exactly as in "
+    "precisely to @audio1. Their face, features, face shape, skin and hair stay exactly as in "
     "@image1 — do not restyle, age, slim or beautify them. Keep the mouth movement SMALL and "
     "natural: gentle close-lipped articulation with only slight jaw movement, never a wide open "
     "mouth, never bared teeth or a gaping shape. They have a warm, lively facial expression — "
@@ -142,10 +130,6 @@ DEFAULT_WORLD_MOTION = (
 )
 
 # ---- cost (2026-07-30 official pages — verify before relying on it) ----------------------
-PRICE_IMAGE_2K = 0.12            # per still (nano-banana-2, 2k)
-PRICE_PERSON_PER_S = 0.194       # Seedance 2.0 720p, after the -20% promo (list 0.2429)
-PRICE_PERSON_FAST_PER_S = 0.058  # Seedance 2.0 Fast: ESTIMATE = standard x 0.3 (the catalog ratio)
-PRICE_WORLD_PER_S = 0.13         # Omni, billed from 3s
 
 
 def article_free(phrase):
@@ -154,7 +138,7 @@ def article_free(phrase):
 
 
 def person_model(doc):
-    """The person-video model: host.person_video_model, else the Seedance 2.0 default."""
+    """The configured person-video model, otherwise the LibTV default."""
     return (doc.get("host") or {}).get("person_video_model") or PERSON_VIDEO_MODEL
 
 
@@ -162,8 +146,6 @@ def world_model(doc):
     return (doc.get("host") or {}).get("world_video_model") or WORLD_VIDEO_MODEL
 
 
-def person_price(model):
-    return PRICE_PERSON_FAST_PER_S if "fast" in model else PRICE_PERSON_PER_S
 
 
 def host_cfg(doc):
@@ -213,12 +195,7 @@ def resolve_layout(doc):
 
 
 def probe_dur(path):
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                          "-of", "csv=p=0", path], capture_output=True, text=True).stdout
-    try:
-        return float(out.strip())
-    except ValueError:
-        return 0.0
+    return probe_duration(path)
 
 
 def host_shots(doc):
@@ -258,7 +235,7 @@ def validate(doc, need_audio=False):
     if not cfg["avatars"]:
         problems.append("beats.json needs host.avatar (a path/URL to the presenter image)")
     for a in cfg["avatars"]:
-        if not a.startswith("http") and not os.path.exists(os.path.expanduser(a)):
+        if not a.startswith(("http", "libtv://")) and not os.path.exists(os.path.expanduser(a)):
             problems.append(f"host.avatar not found: {a}")
     for beat in doc["beats"]:
         hs = [s for s in (beat.get("shots") or []) if s.get("kind") == "host"]
@@ -276,26 +253,13 @@ def validate(doc, need_audio=False):
             dur = probe_dur(ref)
             if dur + TAIL > MAX_VIDEO_S:
                 problems.append(f"[{key}] narration is {dur:.1f}s; a host beat must be "
-                                f"<= {MAX_VIDEO_S - TAIL:.1f}s (Omni's verified clip cap is "
+                                f"<= {MAX_VIDEO_S - TAIL:.1f}s (configured clip cap is "
                                 f"{MAX_VIDEO_S}s) — split the line into two beats")
+            elif dur < 0.25:
+                problems.append(f"[{key}] narration has no usable speech duration")
             elif dur < 3:
                 print(f"[{key}] warning: narration is only {dur:.1f}s; the clip is "
                       f"{MIN_VIDEO_S}s minimum, so the presenter will stand silent for the rest")
     if problems:
         raise SystemExit("host mode:\n  - " + "\n  - ".join(problems))
     return shots
-
-
-def estimate(person_s, world_s, person_per_s=PRICE_PERSON_PER_S):
-    """Rough cost lines + total for the videos still to generate.
-
-    person_s / world_s: shot key -> seconds to generate (absent = already exists, free).
-    """
-    lines, total = [], 0.0
-    for key in sorted(set(person_s) | set(world_s)):
-        p = person_s.get(key, 0) * person_per_s
-        w = world_s.get(key, 0) * PRICE_WORLD_PER_S
-        lines.append(f"  [{key}] person {person_s.get(key, 0)}s ${p:.2f} + "
-                     f"world {world_s.get(key, 0)}s ${w:.2f}")
-        total += p + w
-    return lines, total

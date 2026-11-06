@@ -76,11 +76,11 @@ def build_ending(cards, W, H, out, tmp):
 
 
 def run(project_dir):
-    with open(os.path.join(project_dir, "beats.json")) as f:
+    with open(os.path.join(project_dir, "beats.json"), encoding="utf-8-sig") as f:
         doc = json.load(f)
     beats = doc["beats"]
     W, H = RES.get(doc.get("aspect", "9:16"), (1080, 1920))
-    wm_text = doc.get("watermark", "Made with Atlas Cloud · vox-director")
+    wm_text = doc.get("watermark", "Vox Director · LibTV")
     confetti = os.path.join(project_dir, "assets", "confetti.mp4")
     tmp = os.path.join(project_dir, "_seg"); os.makedirs(tmp, exist_ok=True)
 

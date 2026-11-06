@@ -1,0 +1,766 @@
+{
+  "General image V2": {
+    "kind": "image",
+    "modelKey": "nebula-2-flash",
+    "schema": {
+      "modelKey": "nebula-2-flash",
+      "modelName": "全能图片模型V2-Flash",
+      "modelVendor": "nebula",
+      "baseType": 70,
+      "properties": {
+        "enableSlash": true,
+        "cameraControl": true,
+        "magic": true,
+        "focus": true,
+        "mention": true,
+        "count": [
+          1,
+          2,
+          4
+        ],
+        "template": {
+          "displayName": "风格",
+          "maxCount": 1
+        },
+        "prompt": {
+          "placeholder": "",
+          "maxLength": 0
+        },
+        "quality": {
+          "displayName": "分辨率",
+          "enum": [
+            "1K",
+            "2K",
+            "4K"
+          ],
+          "default": "2K",
+          "component": "singleButton",
+          "originalField": "quality"
+        },
+        "ratio": {
+          "displayName": "比例",
+          "enum": [
+            {
+              "value": "auto",
+              "displayName": "自适应"
+            },
+            "1:1",
+            "9:16",
+            "16:9",
+            "3:4",
+            "4:3",
+            "3:2",
+            "2:3",
+            "4:5",
+            "5:4",
+            "8:1",
+            "1:8",
+            "4:1",
+            "1:4",
+            "21:9"
+          ],
+          "default": "16:9",
+          "component": "singleButton",
+          "originalField": "ratio"
+        },
+        "search_enabled": {
+          "displayName": "联网搜索",
+          "default": 0,
+          "component": "switch",
+          "originalField": "search_enabled"
+        },
+        "modeType": {
+          "items": {
+            "image2image": [
+              0,
+              7
+            ]
+          }
+        }
+      },
+      "config": {
+        "settings": {
+          "text2image": [
+            "quality",
+            "ratio"
+          ],
+          "image2image": [
+            "quality",
+            "ratio"
+          ]
+        },
+        "advancedSettings": [
+          "search_enabled"
+        ],
+        "generateTypes": {
+          "text": 83,
+          "image": 83,
+          "checkpointId": 22621740
+        }
+      },
+      "rules": [
+        {
+          "require": [
+            "prompt",
+            "media"
+          ],
+          "mode": "any"
+        }
+      ]
+    }
+  },
+  "Seedance 2.5": {
+    "kind": "video",
+    "modelKey": "star-video2.5",
+    "schema": {
+      "modelName": "Seedance 2.5",
+      "modelVendor": "star-video2.5",
+      "modelKey": "star-video2.5",
+      "baseType": 69,
+      "properties": {
+        "enablePromptOptimization": true,
+        "supportVideoContinuation": true,
+        "strikethroughPrice": {
+          "active": true
+        },
+        "magic": false,
+        "mention": true,
+        "portrait": true,
+        "supportLongVideo": true,
+        "direction": false,
+        "count": [
+          1,
+          2,
+          4
+        ],
+        "lens": {
+          "displayName": " 镜头",
+          "maxCount": 1
+        },
+        "prompt": {
+          "maxLength": 0
+        },
+        "ratio": {
+          "default": "adaptive",
+          "displayName": "比例",
+          "enum": [
+            {
+              "value": "adaptive",
+              "displayName": "Auto"
+            },
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16",
+            "21:9"
+          ],
+          "originalField": "ratio",
+          "component": "singleButton"
+        },
+        "ratio_auto": {
+          "default": "adaptive",
+          "displayName": "比例",
+          "enum": [
+            {
+              "value": "adaptive",
+              "displayName": "Auto"
+            }
+          ],
+          "originalField": "ratio",
+          "component": "singleButton"
+        },
+        "resolution": {
+          "displayName": "清晰度",
+          "enum": [
+            {
+              "value": "480p",
+              "displayName": "480P"
+            },
+            {
+              "value": "720p",
+              "displayName": "720P"
+            },
+            {
+              "value": "1080p",
+              "displayName": "1080P"
+            }
+          ],
+          "default": "720p",
+          "originalField": "resolution",
+          "component": "singleButton"
+        },
+        "duration": {
+          "displayName": "视频时长",
+          "min": 4,
+          "max": 30,
+          "step": 1,
+          "default": 5,
+          "originalField": "duration",
+          "component": "slider"
+        },
+        "duration_auto": {
+          "default": 0,
+          "displayName": "视频时长",
+          "enum": [
+            {
+              "value": 0,
+              "displayName": "Auto"
+            }
+          ],
+          "originalField": "duration",
+          "component": "singleButton"
+        },
+        "enableSound": {
+          "displayName": "生成音频",
+          "tips": "为生成的视频添加音频内容",
+          "enum": [
+            {
+              "value": "on",
+              "displayName": "开启"
+            },
+            {
+              "value": "off",
+              "displayName": "关闭"
+            }
+          ],
+          "default": "on",
+          "originalField": "enableSound",
+          "component": "singleButton"
+        },
+        "enablePortraitCheck": {
+          "displayName": "真人自动校验",
+          "tips": "开启后自动校验真人内容，提升生成成功率。关闭后，此节点保持关闭，直到手动开启。",
+          "default": 1,
+          "originalField": "enablePortraitCheck",
+          "component": "switch"
+        },
+        "searchEnabled": {
+          "displayName": "联网搜索",
+          "default": 1,
+          "component": "switch",
+          "originalField": "search_enabled"
+        },
+        "autoCompliance": {
+          "batch": true,
+          "enable": true,
+          "displayName": "自动校验素材",
+          "tips": "开启后自动校验素材合规性，提升真人视频生成成功率；非真人生成可关闭，跳过检测节省耗时。",
+          "default": 1,
+          "component": "switch"
+        },
+        "modeType": {
+          "originalField": "modeType",
+          "items": {
+            "singleImage2video": [
+              1,
+              1
+            ],
+            "frames2video": [
+              1,
+              2
+            ],
+            "image2video": [
+              1,
+              30
+            ],
+            "mixed2video": [
+              1,
+              50
+            ],
+            "audio2video": [
+              1,
+              10
+            ],
+            "videoEdit2video": [
+              1,
+              1
+            ],
+            "videoExtend2video": [
+              1,
+              50
+            ]
+          },
+          "mixed2videoConfig": {
+            "videoMax": 10,
+            "imageMax": 30,
+            "audioMax": 10
+          },
+          "videoEdit2videoConfig": {
+            "videoMax": 1,
+            "imageMaxWithVideo": 30
+          }
+        },
+        "mediaConstraints": {
+          "audio": {
+            "duration": {
+              "min": 1.7,
+              "max": 30,
+              "message": "参考音频时长需在2-30秒之间",
+              "action": "block"
+            }
+          }
+        }
+      },
+      "config": {
+        "settings": {
+          "text2video": [
+            "ratio",
+            "resolution",
+            "duration",
+            "enableSound",
+            "enablePortraitCheck"
+          ],
+          "singleImage2video": [
+            "ratio",
+            "resolution",
+            "duration",
+            "enableSound",
+            "enablePortraitCheck"
+          ],
+          "frames2video": [
+            "ratio",
+            "resolution",
+            "duration",
+            "enableSound",
+            "enablePortraitCheck"
+          ],
+          "image2video": [
+            "ratio",
+            "resolution",
+            "duration",
+            "enableSound",
+            "enablePortraitCheck"
+          ],
+          "mixed2video": [
+            "ratio",
+            "resolution",
+            "duration",
+            "enableSound",
+            "enablePortraitCheck"
+          ],
+          "audio2video": [
+            "ratio",
+            "resolution",
+            "duration",
+            "enableSound",
+            "enablePortraitCheck"
+          ],
+          "videoEdit2video": [
+            "ratio_auto",
+            "resolution",
+            "duration_auto",
+            "enableSound",
+            "enablePortraitCheck"
+          ],
+          "videoExtend2video": [
+            "ratio",
+            "resolution",
+            "duration",
+            "enableSound",
+            "enablePortraitCheck"
+          ]
+        },
+        "advancedSettings": [
+          "searchEnabled",
+          "autoCompliance"
+        ],
+        "generateTypes": {
+          "text": 47,
+          "image": 48,
+          "checkpointId": 23164736
+        }
+      },
+      "rules": [
+        {
+          "require": [
+            "prompt",
+            "media"
+          ],
+          "mode": "any"
+        },
+        {
+          "require": [
+            "prompt"
+          ],
+          "forModeTypes": [
+            "text2video"
+          ]
+        }
+      ]
+    }
+  },
+  "Minimax-speech-2.8-hd": {
+    "kind": "audio",
+    "modelKey": "speech-2.8-hd",
+    "schema": {
+      "modelKey": "speech-2.8-hd",
+      "modelName": "Minimax-speech-2.8-hd",
+      "modelVendor": "MiniMax",
+      "scene": "Text-to-Speech",
+      "sceneName": "文字转语音",
+      "properties": {
+        "prompt": {
+          "placeholder": "输入要合成的文本",
+          "maxLength": 50000
+        },
+        "voiceCard": {
+          "displayName": "音色设置",
+          "component": "voiceCard",
+          "originalField": "voice_setting_voice_id",
+          "default": {
+            "voiceId": "female-shaonv",
+            "name": "少女音色",
+            "language": "中文(普通话)",
+            "gender": "Female"
+          }
+        },
+        "speed": {
+          "displayName": "语速",
+          "component": "slider",
+          "layout": "inline",
+          "min": 0.5,
+          "max": 2,
+          "step": 0.01,
+          "default": 1,
+          "originalField": "voice_setting_speed"
+        },
+        "voicePitch": {
+          "displayName": "声调",
+          "component": "slider",
+          "layout": "inline",
+          "min": -12,
+          "max": 12,
+          "step": 1,
+          "default": 0,
+          "originalField": "voice_setting_pitch"
+        },
+        "vol": {
+          "displayName": "音量",
+          "component": "slider",
+          "layout": "inline",
+          "min": 0.01,
+          "max": 10,
+          "step": 0.1,
+          "default": 1,
+          "originalField": "voice_setting_vol"
+        },
+        "modifyPitch": {
+          "displayName": "音高",
+          "tips": "音高调整（低沉/明亮）",
+          "component": "slider",
+          "layout": "inline",
+          "min": -100,
+          "max": 100,
+          "step": 1,
+          "default": 0,
+          "originalField": "voice_modify_pitch"
+        },
+        "modifyIntensity": {
+          "displayName": "强度",
+          "tips": "强度调整（力量感/柔和）",
+          "component": "slider",
+          "layout": "inline",
+          "min": -100,
+          "max": 100,
+          "step": 1,
+          "default": 0,
+          "originalField": "voice_modify_intensity"
+        },
+        "modifyTimbre": {
+          "displayName": "音色调节",
+          "tips": "音色调整（磁性/清脆）",
+          "component": "slider",
+          "layout": "inline",
+          "min": -100,
+          "max": 100,
+          "step": 1,
+          "default": 0,
+          "originalField": "voice_modify_timbre"
+        },
+        "soundEffects": {
+          "displayName": "音效",
+          "enum": [
+            {
+              "value": "",
+              "displayName": "无"
+            },
+            {
+              "value": "spacious_echo",
+              "displayName": "空旷回音"
+            },
+            {
+              "value": "auditorium_echo",
+              "displayName": "礼堂广播"
+            },
+            {
+              "value": "lofi_telephone",
+              "displayName": "电话失真"
+            },
+            {
+              "value": "robotic",
+              "displayName": "电音"
+            }
+          ],
+          "default": "",
+          "component": "singleButton",
+          "originalField": "voice_modify_sound_effects"
+        }
+      },
+      "config": {
+        "advancedSettings": [
+          {
+            "groupKey": "voiceCard",
+            "displayName": "音色设置",
+            "collapsible": false,
+            "fields": [
+              "voiceCard"
+            ]
+          },
+          {
+            "groupKey": "voiceBasic",
+            "displayName": "基础调节",
+            "collapsible": true,
+            "defaultCollapsed": false,
+            "fields": [
+              "speed",
+              "voicePitch",
+              "vol"
+            ]
+          },
+          {
+            "groupKey": "voiceEffects",
+            "displayName": "音色效果调节",
+            "collapsible": true,
+            "defaultCollapsed": true,
+            "fields": [
+              "modifyPitch",
+              "modifyIntensity",
+              "modifyTimbre",
+              "soundEffects"
+            ]
+          }
+        ],
+        "generateTypes": {
+          "audio": 116,
+          "checkpointId": 22890468
+        }
+      },
+      "rules": [
+        {
+          "require": [
+            "prompt"
+          ]
+        }
+      ]
+    }
+  },
+  "Eleven Music V3": {
+    "kind": "audio",
+    "modelKey": "vocal-music",
+    "schema": {
+      "modelKey": "vocal-music",
+      "modelName": "智能音乐模型",
+      "modelVendor": "vocal",
+      "scene": "Music",
+      "sceneName": "音乐",
+      "properties": {
+        "prompt": {
+          "placeholder": "描述信息",
+          "maxLength": 5000
+        },
+        "duration": {
+          "displayName": "音乐时长",
+          "tips": "设定歌曲长度。自动模式下优先保证歌词完整；指定时长后则优先匹配时长。",
+          "enum": [
+            {
+              "value": 30000,
+              "displayName": "30秒"
+            },
+            {
+              "value": 60000,
+              "displayName": "1分钟"
+            },
+            {
+              "value": 120000,
+              "displayName": "2分钟"
+            },
+            {
+              "value": 180000,
+              "displayName": "3分钟"
+            },
+            {
+              "value": 240000,
+              "displayName": "4分钟"
+            }
+          ],
+          "default": 30000,
+          "layout": "horizontal",
+          "component": "singleSelect",
+          "originalField": "music_length_ms"
+        }
+      },
+      "config": {
+        "advancedSettings": [
+          "duration"
+        ],
+        "generateTypes": {
+          "audio": 112,
+          "checkpointId": 22685108
+        }
+      },
+      "rules": [
+        {
+          "require": [
+            "prompt"
+          ]
+        }
+      ]
+    }
+  },
+  "Seed Audio 1.0": {
+    "kind": "audio",
+    "modelKey": "seed-audio-1.0",
+    "schema": {
+      "modelName": "seed-audio-1.0",
+      "modelVendor": "seed-audio",
+      "modelKey": "seed-audio-1.0",
+      "baseType": 80,
+      "properties": {
+        "prompt": {
+          "placeholder": "描述你想要的音频效果，可用 @ 引用音频",
+          "maxLength": 2000
+        },
+        "mention": {
+          "text2audio": false,
+          "image2audio": false,
+          "audio2audio": true
+        },
+        "modeType": {
+          "originalField": "modeType",
+          "items": {
+            "text2audio": [
+              0,
+              0
+            ],
+            "image2audio": [
+              1,
+              1
+            ],
+            "audio2audio": [
+              1,
+              3
+            ]
+          }
+        },
+        "language": {
+          "displayName": "语种",
+          "component": "singleButton",
+          "enum": [
+            {
+              "value": "zh",
+              "displayName": "中文"
+            },
+            {
+              "value": "en",
+              "displayName": "英文"
+            }
+          ],
+          "default": "zh",
+          "originalField": "language"
+        },
+        "sampleRate": {
+          "displayName": "采样率",
+          "component": "singleButton",
+          "enum": [
+            {
+              "value": 8000,
+              "displayName": "8k"
+            },
+            {
+              "value": 16000,
+              "displayName": "16k"
+            },
+            {
+              "value": 24000,
+              "displayName": "24k"
+            },
+            {
+              "value": 48000,
+              "displayName": "48k"
+            }
+          ],
+          "default": 24000,
+          "originalField": "sample_rate"
+        },
+        "format": {
+          "displayName": "输出格式",
+          "component": "singleButton",
+          "enum": [
+            "wav",
+            "mp3",
+            "pcm",
+            "ogg_opus"
+          ],
+          "default": "wav",
+          "originalField": "format"
+        },
+        "speed": {
+          "displayName": "语速",
+          "component": "slider",
+          "layout": "inline",
+          "min": 0.5,
+          "max": 2,
+          "step": 0.01,
+          "default": 1,
+          "originalField": "voice_setting_speed"
+        },
+        "pitch": {
+          "displayName": "声调",
+          "component": "slider",
+          "layout": "inline",
+          "min": -12,
+          "max": 12,
+          "step": 1,
+          "default": 0,
+          "originalField": "voice_setting_pitch"
+        },
+        "vol": {
+          "displayName": "音量",
+          "component": "slider",
+          "layout": "inline",
+          "min": 0.01,
+          "max": 10,
+          "step": 0.1,
+          "default": 1,
+          "originalField": "voice_setting_vol"
+        }
+      },
+      "config": {
+        "settings": [
+          "language",
+          "sampleRate",
+          "format"
+        ],
+        "advancedSettings": [
+          "speed",
+          "pitch",
+          "vol"
+        ],
+        "generateTypes": {
+          "audio": 122,
+          "checkpointId": 23152337
+        }
+      },
+      "rules": [
+        {
+          "require": [
+            "prompt",
+            "media"
+          ],
+          "mode": "any"
+        }
+      ]
+    }
+  }
+}

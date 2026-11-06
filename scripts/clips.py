@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""
-Clip stage: animate each SHOT's keyframe into a short clip (Gemini Omni Flash
-image-to-video), using the shot's own duration and a punchy collage
-motion-graphic prompt (5-axis + the shot's specific move). More, shorter shots
-= more cuts = less "one static frame for 10s".
-
-Usage: python3 clips.py <project_dir>   (default: out/tang-30s)
-"""
+"""Animate each collage keyframe through LibTV with live-schema validated parameters."""
 import json
 import os
 import sys
@@ -14,7 +7,7 @@ import sys
 from provider import get_provider, run_jobs
 from styles import resolve_theme, resolve_video_aspect
 
-VIDEO_MODEL = "google/gemini-omni-flash/image-to-video"
+VIDEO_MODEL = "Seedance 2.5"
 
 
 def shots_of(beat):
@@ -101,7 +94,7 @@ def painterly_prompt(motion):
 
 def run(project_dir, only=None):
     bpath = os.path.join(project_dir, "beats.json")
-    with open(bpath) as f:
+    with open(bpath, encoding="utf-8-sig") as f:
         doc = json.load(f)
     aspect = doc.get("aspect", "16:9")
     style = doc.get("style", "painterly")
@@ -130,7 +123,7 @@ def run(project_dir, only=None):
     if resolved_aspect:
         aspect = resolved_aspect   # every shot below shares this one resolved aspect
 
-    prov = get_provider(doc.get("provider"))
+    prov = get_provider(doc.get("provider"), project_dir, config=doc)
     specs, by_key = {}, {}
     for beat in doc["beats"]:
         for shot, key in shots_of(beat):
@@ -145,8 +138,7 @@ def run(project_dir, only=None):
                 shot["keyframe_url"] = url
                 print(f"[{key}] uploaded provided keyframe -> {url}")
             if not url:
-                print(f"[{key}] no keyframe — provide keyframe_path or run keyframes.py")
-                continue
+                raise RuntimeError(f"[{key}] no keyframe — provide keyframe_path or run keyframes.py")
             # new schema: camera_move (token) + element_motion (rich). Back-compat: old `motion`.
             camera = shot.get("camera_move") or shot.get("motion", "push_in")
             element = shot.get("element_motion")
@@ -157,19 +149,12 @@ def run(project_dir, only=None):
                                         has_title=shot.get("title", True), constraints=constraints)
             else:
                 prompt = painterly_prompt(shot.get("motion", camera))
-            dur = int(shot.get("dur", 10))
-            if "seedance" in model:                 # ratio (not aspect_ratio); real-person OK
-                params = dict(image=url, duration=dur, ratio=aspect,
-                              resolution=vid_res, generate_audio=False)
-            elif "kling-video-o3-pro/reference-to-video" in model:  # has an aspect_ratio enum
-                params = dict(image=url, duration=dur, aspect_ratio=aspect, sound=False)
-            elif "kling" in model:                   # image-to-video / video-edit: follows input; allows real people
-                params = dict(image=url, duration=dur, sound=False)
-            else:                                    # gemini omni flash
-                params = dict(image=url, duration=dur, aspect_ratio=aspect, resolution="720p")
+            dur = shot.get("dur", 5)
+            params = dict(image=url, duration=dur, ratio=aspect,
+                          resolution=vid_res, generate_audio=False)
             specs[key] = (lambda m=model, p=prompt, pr=params: prov.submit_video(m, p, **pr))
             by_key[key] = shot
-            print(f"[{key}] queued ({dur}s, {model.split('/')[1]})")
+            print(f"[{key}] queued ({dur}s, {model})")
 
     done = run_jobs(prov, specs, poll_s=5, stall_s=240, max_retries=2, deadline_s=1200)
 
@@ -183,7 +168,7 @@ def run(project_dir, only=None):
         shot["clip_path"] = dest
         print(f"[{key}] saved {dest}")
 
-    with open(bpath, "w") as f:
+    with open(bpath, "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, indent=2)
     print("updated", bpath)
 

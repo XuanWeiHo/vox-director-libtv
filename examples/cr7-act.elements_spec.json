@@ -1,5 +1,5 @@
 {
-  "card": "/Users/qiutian/Projects/skills/vox-director/out/cr7-act/card2.png",
+  "card": "card.png",
   "elements": [
     {
       "name": "ronaldo",
@@ -10,8 +10,14 @@
         835
       ],
       "mode": "cutout",
-      "erase": [[510, 455, 715, 810]],
-      "file": "/Users/qiutian/Projects/skills/vox-director/out/cr7-act/elements/ronaldo.png",
+      "erase": [
+        [
+          510,
+          455,
+          715,
+          810
+        ]
+      ],
       "size": [
         437,
         750
@@ -26,7 +32,6 @@
         800
       ],
       "mode": "cutout",
-      "file": "/Users/qiutian/Projects/skills/vox-director/out/cr7-act/elements/trophy.png",
       "size": [
         197,
         335
@@ -41,7 +46,6 @@
         246
       ],
       "mode": "cutout",
-      "file": "/Users/qiutian/Projects/skills/vox-director/out/cr7-act/elements/crest.png",
       "size": [
         193,
         154
@@ -56,7 +60,6 @@
         568
       ],
       "mode": "crop",
-      "file": "/Users/qiutian/Projects/skills/vox-director/out/cr7-act/elements/seven.png",
       "size": [
         170,
         318
@@ -71,7 +74,6 @@
         788
       ],
       "mode": "crop",
-      "file": "/Users/qiutian/Projects/skills/vox-director/out/cr7-act/elements/king.png",
       "size": [
         250,
         203
@@ -86,11 +88,11 @@
         948
       ],
       "mode": "crop",
-      "file": "/Users/qiutian/Projects/skills/vox-director/out/cr7-act/elements/y2008.png",
       "size": [
         258,
         120
       ]
     }
-  ]
+  ],
+  "legacy_cr7_layout": true
 }

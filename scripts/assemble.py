@@ -13,12 +13,14 @@ import json
 import os
 import subprocess
 import sys
+from media_utils import probe_duration
 
 import text_overlay
 
 FPS, TAIL = 24, 0.5
-WATERMARK = "Made with Atlas Cloud · vox-director"
-RES = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080)}
+WATERMARK = "Vox Director · LibTV"
+RES = {"16:9": (1920, 1080), "9:16": (1080, 1920), "1:1": (1080, 1080),
+       "4:3": (1440, 1080), "3:4": (1080, 1440), "21:9": (2520, 1080)}
 
 
 def ff(args):
@@ -26,12 +28,7 @@ def ff(args):
 
 
 def probe_dur(path):
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                          "-of", "csv=p=0", path], capture_output=True, text=True).stdout
-    try:
-        return float(out.strip())
-    except ValueError:
-        return 0.0
+    return probe_duration(path)
 
 
 def shots_of(beat):
@@ -43,10 +40,10 @@ def shots_of(beat):
 
 
 def run(project_dir):
-    with open(os.path.join(project_dir, "beats.json")) as f:
+    with open(os.path.join(project_dir, "beats.json"), encoding="utf-8-sig") as f:
         doc = json.load(f)
     beats = doc["beats"]
-    W, H = RES.get(doc.get("aspect", "16:9"), (1920, 1080))
+    W, H = doc.get("output_size") or RES[doc.get("aspect", "16:9")]
     wm_text = doc.get("watermark", WATERMARK)
     mix = doc.get("mix", {})                      # per-project audio balance (optional)
     music_vol = float(mix.get("music", 0.6))      # BGM level (was a fixed 0.9 — lowered so VO leads)
@@ -98,9 +95,10 @@ def run(project_dir):
 
     # ---- 2) concat all shot segments (video only) ----
     listf = os.path.join(tmp, "list.txt")
-    with open(listf, "w") as f:
+    with open(listf, "w", encoding="utf-8") as f:
         for s in seg_files:
-            f.write(f"file '{os.path.abspath(s)}'\n")
+            escaped = os.path.abspath(s).replace(chr(92), "/").replace(chr(39), chr(39)+chr(92)+chr(39)+chr(39))
+            f.write(f"file '{escaped}'\n")
     body = os.path.join(tmp, "body_silent.mp4")
     ff(["-f", "concat", "-safe", "0", "-i", listf, "-c", "copy", body])
 
@@ -131,7 +129,7 @@ def run(project_dir):
     for bs in beat_spans:
         inputs += ["-i", bs["beat"]["narration_audio"]]   # narr inputs
     bgm_idx = narr_base + nb
-    inputs += ["-i", doc["bgm_path"]]
+    inputs += ["-stream_loop", "-1", "-i", doc["bgm_path"]]
 
     chain, prev = [], "[0:v]"
     for i, bs in enumerate(beat_spans[:ncap]):

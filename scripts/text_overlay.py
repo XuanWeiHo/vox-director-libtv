@@ -4,14 +4,23 @@ Text overlays via Pillow -> transparent PNG (this ffmpeg has no libass/drawtext,
 so captions/watermark are rendered as images and composited with `overlay`).
 """
 import os
+import re
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 FONT_BOLD = [
+    os.environ.get("VOX_FONT", ""),
+    "C:/Windows/Fonts/msyhbd.ttc",
+    "/System/Library/Fonts/PingFang.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
     "/Library/Fonts/Arial Bold.ttf",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
 ]
 FONT_REG = [
+    os.environ.get("VOX_FONT", ""),
+    "C:/Windows/Fonts/msyh.ttc",
+    "/System/Library/Fonts/PingFang.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
     "/Library/Fonts/Arial.ttf",
 ]
@@ -23,13 +32,13 @@ def _font(paths, size):
     for p in paths:
         if os.path.exists(p):
             return ImageFont.truetype(p, size)
-    return ImageFont.load_default()
+    raise RuntimeError("No suitable font found; set VOX_FONT to a Unicode font file")
 
 
 def _wrap(draw, text, fnt, max_w):
-    words, lines, cur = text.split(), [], ""
+    words, lines, cur = re.findall(r'[\u3000-\u9fff\uff00-\uffef]|[^\s\u3000-\u9fff\uff00-\uffef]+|\s+', text), [], ""
     for w in words:
-        trial = f"{cur} {w}".strip()
+        trial = (cur + w).lstrip()
         if draw.textlength(trial, font=fnt) <= max_w:
             cur = trial
         else:

@@ -1,0 +1,13 @@
+{
+  "project": "talking-head-collage",
+  "provider": "libtv",
+  "libtv": {"require_video_approval": true},
+  "mode": "aroll",
+  "source_video": "C:/media/presenter.mp4",
+  "language": "zh",
+  "aspect": "16:9",
+  "style": "collage",
+  "theme": "newsprint-editorial",
+  "video_model": "Seedance 2.5",
+  "beats": [{"id": 1, "start": 0, "end": 5, "dur": 5, "text": "请用实际转写文字替换，并核对源视频时间。", "content_beats": "add subtle torn paper arrows behind the presenter"}]
+}

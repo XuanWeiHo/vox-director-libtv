@@ -1,0 +1,31 @@
+{
+  "project": "paper-flight",
+  "provider": "libtv",
+  "libtv": {"require_video_approval": true},
+  "topic": "纸飞机为什么能飞",
+  "language": "zh",
+  "aspect": "16:9",
+  "style": "collage",
+  "theme": "swiss-modern",
+  "image_model": "General image V2",
+  "image_resolution": "1k",
+  "video_model": "Seedance 2.5",
+  "video_resolution": "720p",
+  "voice": {"model": "Minimax-speech-2.8-hd", "language": "zh", "speed": 1.0},
+  "music": {"model": "Eleven Music V3", "prompt": "轻快的科普纪录片配乐，弦乐拨奏和轻打击乐", "duration": 30},
+  "watermark": "Vox Director · LibTV",
+  "beats": [
+    {
+      "id": 1,
+      "title_cn": "",
+      "title_en": "PAPER FLIGHT",
+      "narration": "一张纸，折出飞行的秘密。空气托起机翼，重力让它滑翔。",
+      "bg": "teal blue",
+      "feel": "curious, playful",
+      "shots": [
+        {"id": "a", "dur": 5, "title": true, "scene": "a white folded paper airplane flying across layered blue sky, orange wind arrows and cream paper clouds", "camera_move": "push_in", "element_motion": "the paper airplane glides slowly right while clouds gently bob"},
+        {"id": "b", "dur": 5, "title": false, "scene": "close-up of a folded paper airplane wing with orange airflow arrows above and below, torn paper technical infographic", "camera_move": "static", "element_motion": "the arrows slide smoothly around the wing, the wing stays rigid"}
+      ]
+    }
+  ]
+}

@@ -19,7 +19,7 @@ import sys
 from provider import get_provider, run_jobs
 from styles import compose_collage_prompt, STYLE_LIBRARY, THEME_PRESETS, resolve_theme, image_params
 
-IMAGE_MODEL = "google/nano-banana-2/text-to-image"
+IMAGE_MODEL = "General image V2"
 # candidates are THEME names (full look bundles); Claude picks topic-fitting ones
 DEFAULT_CANDIDATES = ["american-retro", "swiss-modern", "punk-zine", "atomic-age"]
 
@@ -30,25 +30,34 @@ def first_shot(beat):
 
 def run(project_dir, styles=None, beat_index=0):
     styles = styles or DEFAULT_CANDIDATES
-    with open(os.path.join(project_dir, "beats.json")) as f:
+    with open(os.path.join(project_dir, "beats.json"), encoding="utf-8-sig") as f:
         doc = json.load(f)
     aspect = doc.get("aspect", "16:9")
     img_model = doc.get("image_model", IMAGE_MODEL)
     img_res = doc.get("image_resolution", "1k")
     beat = doc["beats"][beat_index]
     shot = first_shot(beat)
-    scene, bg = shot["scene"], beat.get("bg", "warm ochre")
+    scene, bg = shot.get("scene") or beat.get("text", "editorial collage"), beat.get("bg", "warm ochre")
     tcn, ten = beat.get("title_cn", ""), beat.get("title_en", "")
     out = os.path.join(project_dir, "style-bakeoff"); os.makedirs(out, exist_ok=True)
 
-    prov = get_provider(doc.get("provider"))
+    prov = get_provider(doc.get("provider"), project_dir, config=doc)
+    reference = None
+    if doc.get("mode") == "croll":
+        reference = prov.upload(doc["anchor_photo"])
+    elif doc.get("mode") == "aroll":
+        import subprocess
+        frame = os.path.join(out, "source-frame.jpg")
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", str(beat["start"]),
+                        "-i", doc["source_video"], "-frames:v", "1", frame], check=True)
+        reference = prov.upload(frame)
     specs = {}
     for name in styles:
         tp = resolve_theme(name) or {}              # theme name -> full look bundle
         prompt = compose_collage_prompt(scene, tcn, ten, bg, aspect,
                                         style=tp.get("idiom", name), palette=tp.get("palette"),
                                         type_style=tp.get("type_style"), finish=tp.get("finish"))
-        specs[name] = (lambda p=prompt: prov.submit_image(img_model, p,
+        specs[name] = (lambda p=prompt: prov.submit_image(img_model, p, images=[reference] if reference else None,
                                                           **image_params(img_model, aspect, img_res)))
         tag = "library" if name in STYLE_LIBRARY else "custom"
         print(f"[{name}] ({tag}) queued")
