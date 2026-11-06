@@ -5,6 +5,8 @@
 
 本项目改编自 [Alisa0808/vox-director](https://github.com/Alisa0808/vox-director)，保留其 MIT 许可证、创作参考和叙事 / 视觉设计。不需要 Atlas Cloud API key。
 
+首次使用请阅读 [完整中文操作手册](references/user-guide.zh.md)：包含对话指令模板、PowerShell 全流程、四种模式、视频确认、修改恢复与成片验收。
+
 ## 安装
 
 需要 Python 3.10+、LibTV CLI、ffmpeg / ffprobe 和中文字体。CLI 接口依据官方 [1.1.3 文档包](https://liblibai-web-static.liblib.cloud/cli/1.1.3/libtv-cli-skill.zip)，不是同名的 Liblib OpenAPI 第三方 CLI。
